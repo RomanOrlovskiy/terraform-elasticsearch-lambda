@@ -19,7 +19,7 @@ variable "aws_lab_vpc" {
   default = "vpc-0e9fb1b78d517dddd"
 }
 variable "docker_ubuntu_ami" {
-  description = "Docker on ubuntu 18.04"
+  description = "Docker on ubuntu 18.04 (my own AMI)"
   default = "ami-02fc91ce0316c43a4"
 }
 variable "aws_ami" {
@@ -42,6 +42,10 @@ variable "key_name" {
 variable "public_vpc_subnet" {
   description = "Public VPC subnet in 10.0.10.0 network"
   default = "subnet-0a49acc8f29b21b15"
+}
+variable "snapshot_bucket_name" {
+  description = "Bucket name to store elasticsearch snapshots"
+  default = "elasticsearch-custom-snapshot"
 }
 
 resource "aws_security_group" "sg_open" {  
@@ -77,6 +81,7 @@ resource "aws_instance" "elasticsearch" {
   key_name = "${var.key_name}"
   subnet_id = "${var.public_vpc_subnet}"
   vpc_security_group_ids = ["${aws_security_group.sg_open.id}"]
+  iam_instance_profile = "S3-Admin-Access"
 
   user_data = << EOF
     #!/bin/bash
@@ -88,11 +93,20 @@ resource "aws_instance" "elasticsearch" {
     cd docker-elastic-cluster    
     docker-compose up -d
 
+    #wait for containers to spin up
     sleep 60
 
     #create a test index
-
+    curl -H "Content-Type: application/json" -XPUT 'http://localhost:9200/data_1/' -d '{ "settings" : {"index" : {"number_of_shards" : 3, "number_of_replicas" : 1 } } }'
+    
     #try to create S3 snapshot repository
+    curl -X PUT "localhost:9200/_snapshot/custom-snapshot" -H 'Content-Type: application/json' -d' { "type": "s3", "settings": { "bucket": "${var.snapshot_bucket_name}" } } '
+
+    #Start your first snapshot on created repo:
+    curl -X PUT "localhost:9200/_snapshot/custom-snapshot/snapshot_1?wait_for_completion=false"
+    
+    #Check State of snapshot (also cross check this with your s3 repo):
+    #curl -X GET "localhost:9200/_snapshot/custom-snapshot/snapshot_1"
     
   EOF
   

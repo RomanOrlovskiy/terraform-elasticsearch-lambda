@@ -9,21 +9,29 @@ services:
       context: elasticsearch/
       args:
         ELK_VERSION: $ELK_VERSION
+        AWS_ACCESS_KEY: $ACCESS_KEY
+        AWS_SECRET_ACCESS_KEY: $SECRET_KEY
     ports:
       - "9200:9200"
     environment:
-      - node.name=elasticsearch
-      - node.master=true
-      - node.ingest=true
-      - node.data=false
-      - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
-      - cluster.name=dev-es-cluster
-      - network.host=0.0.0.0
-      - cluster.initial_master_nodes=elasticsearch
+      # - node.name=elasticsearch
+      # - node.master=true
+      # - node.ingest=true
+      # - node.data=true
+      # - "ES_JAVA_OPTS=-Xmx200m -Xms200m"
+      # - cluster.name=dev-es-cluster
+      # - network.host=0.0.0.0
+      # - cluster.initial_master_nodes=elasticsearch
+      ELASTIC_PASSWORD: changeme
+      ES_JAVA_OPTS: "-Xmx200m -Xms200m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
     networks:
       - elk
-    depends_on:
-      - master01
 
   # # 3 master nodes
   # master01:
@@ -46,24 +54,28 @@ services:
   #     - elk
 
   # two data nodes
-  data01:
-    container_name: data01
-    image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION    
-    ports:
-      - "9201:9200"
-    environment:
-      - node.name=data01
-      - node.master=false
-      - node.ingest=false
-      - node.data=true
-      - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
-      - cluster.name=dev-es-cluster
-      - network.host=0.0.0.0
-      - discovery.zen.ping.unicast.hosts=elasticsearch
-    networks:
-      - elk
-    depends_on:
-      - elasticsearch
+  # data01:
+  #   container_name: data01
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION    
+  #   ports:
+  #     - "9201:9200"
+  #   environment:
+  #     - node.name=data01
+  #     - node.master=false
+  #     - node.ingest=false
+  #     - node.data=true
+  #     - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
+  #     - cluster.name=dev-es-cluster
+  #     - network.host=0.0.0.0
+  #     - discovery.zen.ping.unicast.hosts=elasticsearch    
+  #   ulimits:
+  #     memlock:
+  #       soft: -1
+  #       hard: -1
+  #   networks:
+  #     - elk
+  #   depends_on:
+  #     - elasticsearch
 
   cerebro:
     image: lmenezes/cerebro
@@ -76,7 +88,11 @@ services:
     depends_on:
       - elasticsearch
     environment:
-      - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
+      - "JAVA_OPTS=-Xmx100m -Xms100m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
 
 networks:
   elk:
