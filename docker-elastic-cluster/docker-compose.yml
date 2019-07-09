@@ -24,7 +24,7 @@ services:
       # - network.host=0.0.0.0
       # - cluster.initial_master_nodes=elasticsearch
       ELASTIC_PASSWORD: changeme
-      ES_JAVA_OPTS: "-Xmx200m -Xms200m"
+      ES_JAVA_OPTS: "-Xmx160m -Xms160m"
     ulimits:
       memlock:
         soft: -1

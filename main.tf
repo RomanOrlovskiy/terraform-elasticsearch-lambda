@@ -49,6 +49,10 @@ variable "snapshot_bucket_name" {
   default = "elasticsearch-custom-snapshot"
 }
 
+variable "s3_instance_profile_name" {
+  default = "S3-Admin-Access"
+}
+
 resource "aws_security_group" "sg_open" {
   vpc_id = "${var.aws_lab_vpc}"
   tags = {
@@ -82,33 +86,43 @@ resource "aws_instance" "elasticsearch" {
   key_name = "${var.key_name}"
   subnet_id = "${var.public_vpc_subnet}"
   vpc_security_group_ids = ["${aws_security_group.sg_open.id}"]
-  iam_instance_profile = "S3-Admin-Access"
+  iam_instance_profile = "${var.s3_instance_profile_name}"
 
   user_data = <<EOF
 #!/bin/bash
+
 #sudo apt-get update -y
-sudo systemctl enable docker
+#sudo systemctl enable docker
+
+#Export AWS credentials for elasticsearch container to use
+
+sudo apt install jq -y && \
+  export ACCESS_KEY=$(curl --silent http://169.254.169.254/latest/meta-data/iam/security-credentials/${var.s3_instance_profile_name} | jq -r .AccessKeyId) && \
+  export SECRET_KEY=$(curl --silent http://169.254.169.254/latest/meta-data/iam/security-credentials/${var.s3_instance_profile_name} | jq -r .SecretAccessKey) && \
+  export AWS_SESSION_TOKEN=$(curl --silent http://169.254.169.254/latest/meta-data/iam/security-credentials/${var.s3_instance_profile_name} | jq -r .Token)
 
 #run elasticsearch container
+cd ~
 git clone https://github.com/RomanOrlovskiy/terraform-elasticsearch-lambda
 cd terraform-elasticsearch-lambda/docker-elastic-cluster/
-docker-compose config
-# docker-compose up -d
-#
-# #wait for containers to spin up
-# sleep 60
-#
-# #create a test index
-# curl -H "Content-Type: application/json" -XPUT 'http://localhost:9200/data_1/' -d '{ "settings" : {"index" : {"number_of_shards" : 3, "number_of_replicas" : 1 } } }'
-#
-# #try to create S3 snapshot repository
-# curl -X PUT "localhost:9200/_snapshot/custom-snapshot" -H 'Content-Type: application/json' -d' { "type": "s3", "settings": { "bucket": "${var.snapshot_bucket_name}" } } '
-#
-# #Start your first snapshot on created repo:
-# curl -X PUT "localhost:9200/_snapshot/custom-snapshot/snapshot_1?wait_for_completion=false"
-#
-# #Check State of snapshot (also cross check this with your s3 repo):
-# #curl -X GET "localhost:9200/_snapshot/custom-snapshot/snapshot_1"
+docker-compose up -d
+
+#wait for containers to spin up
+sleep 120
+
+#create a test index
+curl -u elastic:changeme -H "Content-Type: application/json" -XPUT 'http://localhost:9200/data_1/' -d '{ "settings" : {"index" : {"number_of_shards" : 3, "number_of_replicas" : 1 } } }'
+
+#create S3 snapshot repository
+curl -u elastic:changeme -X PUT "localhost:9200/_snapshot/custom-snapshot" -H 'Content-Type: application/json' -d' { "type": "s3", "settings": { "bucket": "${var.snapshot_bucket_name}", "server_side_encryption" : true } } '
+
+#Start your first snapshot on created repo:
+
+curl -u elastic:changeme -X PUT "localhost:9200/_snapshot/custom-snapshot/%3Csnapshot-%7Bnow%2Fd%7D%3E?wait_for_completion=false"
+#curl -u elastic:changeme -X PUT "localhost:9200/_snapshot/custom-snapshot/snapshot_1?wait_for_completion=false"
+
+#Check State of snapshot (also cross check this with your s3 repo):
+#curl -u elastic:changeme -X GET "localhost:9200/_snapshot/custom-snapshot/snapshot_1"
 EOF
 
   tags = {
