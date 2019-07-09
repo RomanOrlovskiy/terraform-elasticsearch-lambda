@@ -11,6 +11,7 @@ services:
         ELK_VERSION: $ELK_VERSION
         AWS_ACCESS_KEY: $ACCESS_KEY
         AWS_SECRET_ACCESS_KEY: $SECRET_KEY
+        AWS_SESSION_TOKEN: $AWS_SESSION_TOKEN
     ports:
       - "9200:9200"
     environment:
@@ -36,7 +37,7 @@ services:
   # # 3 master nodes
   # master01:
   #   container_name: master01
-  #   image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION        
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION
   #   ports:
   #     - "9221:9200"
   #   environment:
@@ -56,7 +57,7 @@ services:
   # two data nodes
   # data01:
   #   container_name: data01
-  #   image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION    
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION
   #   ports:
   #     - "9201:9200"
   #   environment:
@@ -67,7 +68,7 @@ services:
   #     - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
   #     - cluster.name=dev-es-cluster
   #     - network.host=0.0.0.0
-  #     - discovery.zen.ping.unicast.hosts=elasticsearch    
+  #     - discovery.zen.ping.unicast.hosts=elasticsearch
   #   ulimits:
   #     memlock:
   #       soft: -1

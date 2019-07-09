@@ -4,9 +4,10 @@ provider "aws" {
 
 terraform {
   backend "s3" {
-    bucket = "terraform-elasticsearch-backup-lambdas"
-    key    = "terraform.tfstate"
+    bucket = "rorlovskyi-terraform-projects"
+    key    = "terraform-elasticsearch-lambda/terraform.tfstate"
     region = "us-west-2"
+    encrypt = true
   }
 }
 
@@ -20,7 +21,7 @@ variable "aws_lab_vpc" {
 }
 variable "docker_ubuntu_ami" {
   description = "Docker on ubuntu 18.04 (my own AMI)"
-  default = "ami-02fc91ce0316c43a4"
+  default = "ami-0d937dae5b70e06e4"
 }
 variable "aws_ami" {
   description = "AWS default Linux AMI 2"
@@ -48,9 +49,9 @@ variable "snapshot_bucket_name" {
   default = "elasticsearch-custom-snapshot"
 }
 
-resource "aws_security_group" "sg_open" {  
+resource "aws_security_group" "sg_open" {
   vpc_id = "${var.aws_lab_vpc}"
-  tags {
+  tags = {
         Name = "sg_open"
   }
 # Allow all inbound
@@ -83,34 +84,34 @@ resource "aws_instance" "elasticsearch" {
   vpc_security_group_ids = ["${aws_security_group.sg_open.id}"]
   iam_instance_profile = "S3-Admin-Access"
 
-  user_data = << EOF
-    #!/bin/bash
-    sudo apt-get update -y
-    systemd enable docker
-    
-    #run elasticsearch container
-    git clone ....
-    cd docker-elastic-cluster    
-    docker-compose up -d
+  user_data = <<EOF
+#!/bin/bash
+#sudo apt-get update -y
+sudo systemctl enable docker
 
-    #wait for containers to spin up
-    sleep 60
+#run elasticsearch container
+git clone https://github.com/RomanOrlovskiy/terraform-elasticsearch-lambda
+cd terraform-elasticsearch-lambda/docker-elastic-cluster/
+docker-compose config
+# docker-compose up -d
+#
+# #wait for containers to spin up
+# sleep 60
+#
+# #create a test index
+# curl -H "Content-Type: application/json" -XPUT 'http://localhost:9200/data_1/' -d '{ "settings" : {"index" : {"number_of_shards" : 3, "number_of_replicas" : 1 } } }'
+#
+# #try to create S3 snapshot repository
+# curl -X PUT "localhost:9200/_snapshot/custom-snapshot" -H 'Content-Type: application/json' -d' { "type": "s3", "settings": { "bucket": "${var.snapshot_bucket_name}" } } '
+#
+# #Start your first snapshot on created repo:
+# curl -X PUT "localhost:9200/_snapshot/custom-snapshot/snapshot_1?wait_for_completion=false"
+#
+# #Check State of snapshot (also cross check this with your s3 repo):
+# #curl -X GET "localhost:9200/_snapshot/custom-snapshot/snapshot_1"
+EOF
 
-    #create a test index
-    curl -H "Content-Type: application/json" -XPUT 'http://localhost:9200/data_1/' -d '{ "settings" : {"index" : {"number_of_shards" : 3, "number_of_replicas" : 1 } } }'
-    
-    #try to create S3 snapshot repository
-    curl -X PUT "localhost:9200/_snapshot/custom-snapshot" -H 'Content-Type: application/json' -d' { "type": "s3", "settings": { "bucket": "${var.snapshot_bucket_name}" } } '
-
-    #Start your first snapshot on created repo:
-    curl -X PUT "localhost:9200/_snapshot/custom-snapshot/snapshot_1?wait_for_completion=false"
-    
-    #Check State of snapshot (also cross check this with your s3 repo):
-    #curl -X GET "localhost:9200/_snapshot/custom-snapshot/snapshot_1"
-    
-  EOF
-  
-  tags {
+  tags = {
     Name  = "elasticsearch-cluster"
     CNAME = "elasticsearch.quitequiet.net"
   }
@@ -119,7 +120,7 @@ resource "aws_instance" "elasticsearch" {
 #Provision ASG EC2 instances with Ansible
 # resource "null_resource" "ecs_hosts" {
 #   depends_on = ["aws_instance.elasticsearch"]
-  
+
 #   connection {
 #     user = "ec2-user"
 #     private_key = "${file("~/.ssh/keys/WebServer01.pem")}"
