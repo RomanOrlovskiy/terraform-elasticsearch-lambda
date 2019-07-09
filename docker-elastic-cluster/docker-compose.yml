@@ -1,0 +1,83 @@
+version: '2'
+
+services:
+
+  #client node for communication with external resources
+  elasticsearch:
+    container_name: elasticsearch
+    build:
+      context: elasticsearch/
+      args:
+        ELK_VERSION: $ELK_VERSION
+    ports:
+      - "9200:9200"
+    environment:
+      - node.name=elasticsearch
+      - node.master=true
+      - node.ingest=true
+      - node.data=false
+      - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
+      - cluster.name=dev-es-cluster
+      - network.host=0.0.0.0
+      - cluster.initial_master_nodes=elasticsearch
+    networks:
+      - elk
+    depends_on:
+      - master01
+
+  # # 3 master nodes
+  # master01:
+  #   container_name: master01
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION        
+  #   ports:
+  #     - "9221:9200"
+  #   environment:
+  #     - node.name=master01
+  #     - node.master=true
+  #     - node.ingest=false
+  #     - node.data=false
+  #     - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
+  #     - cluster.name=dev-es-cluster
+  #     - network.host=0.0.0.0
+  #     - discovery.zen.ping.unicast.hosts=master02,master03
+  #     - cluster.initial_master_nodes=master01
+  #     - discovery.zen.minimum_master_nodes=2
+  #   networks:
+  #     - elk
+
+  # two data nodes
+  data01:
+    container_name: data01
+    image: docker.elastic.co/elasticsearch/elasticsearch:$ELK_VERSION    
+    ports:
+      - "9201:9200"
+    environment:
+      - node.name=data01
+      - node.master=false
+      - node.ingest=false
+      - node.data=true
+      - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
+      - cluster.name=dev-es-cluster
+      - network.host=0.0.0.0
+      - discovery.zen.ping.unicast.hosts=elasticsearch
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+
+  cerebro:
+    image: lmenezes/cerebro
+    ports:
+      - 9000:9000
+    volumes:
+      - ./cerebro/config/application.conf:/opt/cerebro/conf/application.conf
+    networks:
+      - elk
+    depends_on:
+      - elasticsearch
+    environment:
+      - "ES_JAVA_OPTS=-Xmx256m -Xms256m"
+
+networks:
+  elk:
+    driver: bridge
