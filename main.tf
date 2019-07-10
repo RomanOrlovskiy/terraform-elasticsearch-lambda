@@ -177,8 +177,6 @@ resource "aws_lambda_function" "create_snapshot_lambda" {
   role          = "${aws_iam_role.iam_for_lambda.arn}"
   handler       = "create.lambda_handler"
 
-  #source_code_hash = "${filebase64sha256("C:/Users/roman_orlovskyi/Documents/projects/pre-prod/lambda/elastic-snapshots/es-create-snapshots.zip")}"
-
   runtime = "python3.6"
 
   environment {
@@ -187,7 +185,7 @@ resource "aws_lambda_function" "create_snapshot_lambda" {
     }
   }
   
-  depends_on    = ["aws_iam_role_policy_attachment.lambda_logs", "aws_cloudwatch_log_group.example"]
+  depends_on    = ["aws_iam_role_policy_attachment.lambda_logs"]
 }
 
 resource "aws_cloudwatch_event_rule" "every_five_minutes" {
@@ -216,17 +214,9 @@ resource "aws_lambda_function" "rotate_snapshot_lambda" {
   role          = "${aws_iam_role.iam_for_lambda.arn}"
   handler       = "rotate.lambda_handler"
 
-  #source_code_hash = "${filebase64sha256("C:/Users/roman_orlovskyi/Documents/projects/pre-prod/lambda/elastic-snapshots/es-rotate-snapshots.zip")}"
-
   runtime = "python3.6"
-
-  environment {
-    variables = {
-      foo = "bar"
-    }
-  }
   
-  depends_on    = ["aws_iam_role_policy_attachment.lambda_logs", "aws_cloudwatch_log_group.example2"]
+  depends_on    = ["aws_iam_role_policy_attachment.lambda_logs"]
 }
 
 resource "aws_cloudwatch_event_rule" "every_twenty_minutes" {
@@ -269,18 +259,6 @@ resource "aws_iam_role" "iam_for_lambda" {
 EOF
 }
 
-# This is to optionally manage the CloudWatch Log Group for the Lambda Function.
-# If skipping this resource configuration, also add "logs:CreateLogGroup" to the IAM policy below.
-resource "aws_cloudwatch_log_group" "example" {
-  name              = "/aws/lambda/${var.lambda_function_name_1}"
-  retention_in_days = 3
-}
-
-resource "aws_cloudwatch_log_group" "example2" {
-  name              = "/aws/lambda/${var.lambda_function_name_2}"
-  retention_in_days = 3
-}
-
 # See also the following AWS managed policy: AWSLambdaBasicExecutionRole
 resource "aws_iam_policy" "lambda_logging" {
   name = "lambda_logging"
@@ -293,6 +271,7 @@ resource "aws_iam_policy" "lambda_logging" {
   "Statement": [
     {
       "Action": [
+        "logs:CreateLogGroup"
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
