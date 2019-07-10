@@ -5,6 +5,7 @@ services:
   #client node for communication with external resources
   elasticsearch:
     container_name: elasticsearch
+    restart: always
     build:
       context: elasticsearch/
       args:
@@ -80,6 +81,7 @@ services:
 
   cerebro:
     image: lmenezes/cerebro
+    restart: always
     ports:
       - 9000:9000
     volumes:

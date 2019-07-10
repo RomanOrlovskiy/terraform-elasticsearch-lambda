@@ -53,6 +53,18 @@ variable "s3_instance_profile_name" {
   default = "S3-Admin-Access"
 }
 
+variable "dns_record" {
+  default = "elasticsearch.quitequiet.net"
+}
+
+variable "lambda_function_name_1" {
+  default = "es-create-snapshots"
+}
+
+variable "lambda_function_name_2" {
+  default = "es-rotate-snapshots"
+}
+
 resource "aws_security_group" "sg_open" {
   vpc_id = "${var.aws_lab_vpc}"
   tags = {
@@ -94,14 +106,14 @@ resource "aws_instance" "elasticsearch" {
 #sudo apt-get update -y
 #sudo systemctl enable docker
 
-#Export AWS credentials for elasticsearch container to use
+#Export AWS credentials for elasticsearch containers to use
 
 sudo apt install jq -y && \
   export ACCESS_KEY=$(curl --silent http://169.254.169.254/latest/meta-data/iam/security-credentials/${var.s3_instance_profile_name} | jq -r .AccessKeyId) && \
   export SECRET_KEY=$(curl --silent http://169.254.169.254/latest/meta-data/iam/security-credentials/${var.s3_instance_profile_name} | jq -r .SecretAccessKey) && \
   export AWS_SESSION_TOKEN=$(curl --silent http://169.254.169.254/latest/meta-data/iam/security-credentials/${var.s3_instance_profile_name} | jq -r .Token)
 
-#run elasticsearch container
+#run elasticsearch containers
 cd ~
 git clone https://github.com/RomanOrlovskiy/terraform-elasticsearch-lambda
 cd terraform-elasticsearch-lambda/docker-elastic-cluster/
@@ -127,7 +139,7 @@ EOF
 
   tags = {
     Name  = "elasticsearch-cluster"
-    CNAME = "elasticsearch.quitequiet.net"
+    DNS-RECORD = "${var.dns_record}"
   }
 }
 
@@ -156,6 +168,153 @@ EOF
 #   }
 # }
 
+
+## Create two lambda functions and Cloudwatch crons for them
+
+resource "aws_lambda_function" "create_snapshot_lambda" {
+  filename      = "C:/Users/roman_orlovskyi/Documents/projects/pre-prod/lambda/elastic-snapshots/es-create-snapshots.zip"
+  function_name = "createSnapshots"
+  role          = "${aws_iam_role.iam_for_lambda.arn}"
+  handler       = "create.lambda_handler"
+
+  #source_code_hash = "${filebase64sha256("C:/Users/roman_orlovskyi/Documents/projects/pre-prod/lambda/elastic-snapshots/es-create-snapshots.zip")}"
+
+  runtime = "python3.6"
+
+  environment {
+    variables = {
+      foo = "bar"
+    }
+  }
+  
+  depends_on    = ["aws_iam_role_policy_attachment.lambda_logs", "aws_cloudwatch_log_group.example"]
+}
+
+resource "aws_cloudwatch_event_rule" "every_five_minutes" {
+    name = "every-five-minutes"
+    description = "Fires every five minutes"
+    schedule_expression = "rate(5 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "create_snapshot_every_five_minutes" {
+    rule = "${aws_cloudwatch_event_rule.every_five_minutes.name}"
+    target_id = "create_snapshot_lambda"
+    arn = "${aws_lambda_function.create_snapshot_lambda.arn}"
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_create_snapshot" {
+    statement_id = "AllowExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = "${aws_lambda_function.create_snapshot_lambda.function_name}"
+    principal = "events.amazonaws.com"
+    source_arn = "${aws_cloudwatch_event_rule.every_five_minutes.arn}"
+}
+
+resource "aws_lambda_function" "rotate_snapshot_lambda" {
+  filename      = "C:/Users/roman_orlovskyi/Documents/projects/pre-prod/lambda/elastic-snapshots/es-rotate-snapshots.zip"
+  function_name = "rotateSnapshots"
+  role          = "${aws_iam_role.iam_for_lambda.arn}"
+  handler       = "rotate.lambda_handler"
+
+  #source_code_hash = "${filebase64sha256("C:/Users/roman_orlovskyi/Documents/projects/pre-prod/lambda/elastic-snapshots/es-rotate-snapshots.zip")}"
+
+  runtime = "python3.6"
+
+  environment {
+    variables = {
+      foo = "bar"
+    }
+  }
+  
+  depends_on    = ["aws_iam_role_policy_attachment.lambda_logs", "aws_cloudwatch_log_group.example2"]
+}
+
+resource "aws_cloudwatch_event_rule" "every_twenty_minutes" {
+    name = "every-twenty-minutes"
+    description = "Fires every twenty minutes"
+    schedule_expression = "rate(20 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "create_snapshot_every_twenty_minutes" {
+    rule = "${aws_cloudwatch_event_rule.every_twenty_minutes.name}"
+    target_id = "rotate_snapshot_lambda"
+    arn = "${aws_lambda_function.rotate_snapshot_lambda.arn}"
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_rotate_snapshot_lambda" {
+    statement_id = "AllowExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = "${aws_lambda_function.rotate_snapshot_lambda.function_name}"
+    principal = "events.amazonaws.com"
+    source_arn = "${aws_cloudwatch_event_rule.every_twenty_minutes.arn}"
+}
+
+resource "aws_iam_role" "iam_for_lambda" {
+  name = "iam_for_lambda"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+# This is to optionally manage the CloudWatch Log Group for the Lambda Function.
+# If skipping this resource configuration, also add "logs:CreateLogGroup" to the IAM policy below.
+resource "aws_cloudwatch_log_group" "example" {
+  name              = "/aws/lambda/${var.lambda_function_name_1}"
+  retention_in_days = 3
+}
+
+resource "aws_cloudwatch_log_group" "example2" {
+  name              = "/aws/lambda/${var.lambda_function_name_2}"
+  retention_in_days = 3
+}
+
+# See also the following AWS managed policy: AWSLambdaBasicExecutionRole
+resource "aws_iam_policy" "lambda_logging" {
+  name = "lambda_logging"
+  path = "/"
+  description = "IAM policy for logging from a lambda"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*",
+      "Effect": "Allow"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role = "${aws_iam_role.iam_for_lambda.name}"
+  policy_arn = "${aws_iam_policy.lambda_logging.arn}"
+}
+
+
+
 output "elasticsearch_ip" {
   value = "${aws_instance.elasticsearch.public_ip}"
+}
+
+output "dns-name" {
+  value = "${var.dns_record}"
 }
