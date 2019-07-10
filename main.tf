@@ -193,7 +193,7 @@ resource "aws_lambda_function" "create_snapshot_lambda" {
 resource "aws_cloudwatch_event_rule" "every_five_minutes" {
     name = "every-five-minutes"
     description = "Fires every five minutes"
-    schedule_expression = "rate(5 minutes)"
+    schedule_expression = "rate(2 minutes)"
 }
 
 resource "aws_cloudwatch_event_target" "create_snapshot_every_five_minutes" {
@@ -232,7 +232,7 @@ resource "aws_lambda_function" "rotate_snapshot_lambda" {
 resource "aws_cloudwatch_event_rule" "every_twenty_minutes" {
     name = "every-twenty-minutes"
     description = "Fires every twenty minutes"
-    schedule_expression = "rate(20 minutes)"
+    schedule_expression = "rate(10 minutes)"
 }
 
 resource "aws_cloudwatch_event_target" "create_snapshot_every_twenty_minutes" {
